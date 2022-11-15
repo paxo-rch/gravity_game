@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Gravity</title>
+    <style type="text/css">
+        html, body {
+            margin: 0;
+        }
+        
+        html {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            height: 100%;
+        }
+        
+        body {
+            overflow: hidden;
+            height: inherit;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            letter-spacing: -1px;
+            position: absolute;
+            margin: 0;
+            top: -4px;
+            right: 5px;
+        
+            color: transparent;
+            text-shadow: 0 0 4px white;
+        }
+    </style>
+  </head>
+
+  <body style="text-align: center;">
+    <h1>Gravity</h1>
+    <canvas onclick="screenClicked=true;"></canvas>
+    <input type="button" onclick="launched=true" value="lancer!" style="width: 300px; height: 30px;"></input>
+
+    <script>
+        const canvas = document.querySelector('canvas');
+
+        const ctx = canvas.getContext('2d');
+
+        const width = canvas.width = window.innerWidth;
+        const height = canvas.height = window.innerHeight-40;
+
+        let screenClicked = false;
+
+        var rightPressed = false;
+        var leftPressed = false;
+        var gunPressed = false;
+        var mouseX=0,mouseY=0,mouseDown=0;
+        var lst_mouseX=0,mouseY=0,mouseDown=0;
+        let launched = false;
+
+        var inputStates = {};
+
+        window.addEventListener('keydown', function(event){  
+            if (event.keyCode === 37) {  
+            inputStates.left = true;  
+            } else if (event.keyCode === 38) {  
+            inputStates.up = true;  
+            } else if (event.keyCode === 39) {  
+            inputStates.right = true;  
+            } else if (event.keyCode === 40) {  
+            inputStates.down = true;  
+            }  else if (event.keyCode === 32) {  
+            inputStates.space = true;  
+            }  
+        }, false);  
+
+        //if the key will be released, change the states object   
+        window.addEventListener('keyup', function(event){  
+            if (event.keyCode === 37) {  
+            inputStates.left = false;  
+            } else if (event.keyCode === 38) {  
+            inputStates.up = false;  
+            } else if (event.keyCode === 39) {  
+            inputStates.right = false;  
+            } else if (event.keyCode === 40) {  
+            inputStates.down = false;  
+            } else if (event.keyCode === 32) {  
+            inputStates.space = false;  
+            }  
+        }, false);
+
+        // Keep track of the mouse button being pressed and draw a dot at current location
+        function sketchpad_mouseDown(event) {
+            mouseDown=1;
+        }
+
+        function sketchpad_mouseUp() {
+            mouseDown=0;
+        }
+
+        function sketchpad_mouseMove(event) {
+            event.preventDefault();
+  
+            if (mouseDown) {
+                const mousePos = getMosuePositionOnCanvas(event);
+                mouseX=mousePos.x;
+                mouseY=mousePos.y;
+            }
+        }
+
+        function getMosuePositionOnCanvas(event) {
+            const clientX = event.clientX || event.touches[0].clientX;
+            const clientY = event.clientY || event.touches[0].clientY;
+            const { offsetLeft, offsetTop } = event.target;
+            const canvasX = clientX - offsetLeft;
+            const canvasY = clientY - offsetTop;
+
+            return { x: canvasX, y: canvasY };
+            }
+
+        function getMousePos(e) {
+            if (!e)
+                var e = event;
+
+            if (e.offsetX) {
+                mouseX = e.offsetX;
+                mouseY = e.offsetY;
+            }
+            else if (e.layerX) {
+                mouseX = e.layerX;
+                mouseY = e.layerY;
+            }
+        }
+
+
+        canvas.addEventListener('mousedown', sketchpad_mouseDown, false);
+        canvas.addEventListener('mousemove', sketchpad_mouseMove, false);
+        canvas.addEventListener('mouseup', sketchpad_mouseUp, false);
+
+        canvas.addEventListener('touchstart', sketchpad_mouseDown, false);
+        canvas.addEventListener('touchmove', sketchpad_mouseMove, false);
+        canvas.addEventListener('touchend', sketchpad_mouseUp, false);
+
+
+
+        function radians(degree)
+        {
+            let pi = 3.14159265359;
+            return (degree * (pi / 180));
+        }
+
+        function rotate(x, y, r)
+        {
+            r*=-1;
+            let cosR=Math.cos(r);
+            let sinR=Math.sin(r);
+            let a2 = [0,0];
+            let rx=x*cosR-y*sinR;
+            let ry=y*cosR+x*sinR;
+            return [rx, ry];
+        }
+
+        function force(w1, x1, y1, w2, x2, y2, vx, vy)
+        {
+            if(x1-x2==0 && y1-y2==0)
+                return;
+
+            let f = ((w1/10000)*(w2/10000))/(Math.pow(x1-x2, 2) + Math.pow(y1-y2, 2));
+            let dx = x1-x2;
+            let d = Math.sqrt(Math.pow(x1-x2, 2) + Math.pow(y1-y2, 2));
+
+            if(dx<0)
+                dx*=-1;
+                let a = Math.acos(dx/d);
+            vx=Math.cos(a)*f;
+            vy=Math.sin(a)*f;
+            if(x1>x2)
+                vx*=-1;
+            if(y1>y2)
+                vy*=-1;
+            return [vx, vy];
+        }
+
+        function drawCircle(x, y, radius, r, g, b)
+        {
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(255, 255, 0, 1)';
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawText(text, x, y)
+        {
+            ctx.beginPath();
+            ctx.font = '48px serif';
+            ctx.fillText(text, x, y);
+        }
+
+        function drawline(x1, y1, x2, y2)
+        {
+            ctx.beginPath(); // Start a new path
+            ctx.moveTo(x1, y1); // Move the pen to (30, 50)
+            ctx.lineTo(x2, y2); // Draw a line to (150, 100)
+            ctx.stroke(); // Render the path
+        }
+
+        let astres = [];
+        let nb_to_generate = 1;
+        let nb_tentatives = 0;
+        let points = 0.0;
+
+        class Astre
+        {
+            constructor(x, y, weight, r, g, b, canMove)
+            {
+                astres.push(this);
+                this.x = x;
+                this.y = y;
+                this.weight = weight;
+                this.r = r;
+                this.g = g;
+                this.b = b;
+                this.canMove = canMove;
+                this.vx = 0;
+                this.vy = 0;
+            }
+            draw()
+            {
+                let pi = 3.14159265359;
+                drawCircle(this.x, this.y, Math.pow((this.weight*3)/(pi*4), 1/3)/4, this.r, this.g, this.b);
+            }
+            static update()
+            {
+                for (let i = 0; i < astres.length; i++)
+                {
+                    let a = astres[i];
+
+                    if(a.canMove)
+                    {
+                        for (let j = 0; j < astres.length; j++)
+                        {
+                            let b = astres[j];
+
+                            let forcex = 0, forcey = 0;
+
+                            if(a!=b)
+                            {
+                                forcex = force(a.weight, a.x, a.y, b.weight, b.x, b.y, 0, 0)[0];
+                                forcey = force(a.weight, a.x, a.y, b.weight, b.x, b.y, 0, 0)[1];
+                            }    
+                            
+                            a.vx+=forcex/10;
+                            a.vy+=forcey/10;
+                        }
+                    }
+                }
+
+                for (let i = 0; i < astres.length; i++)
+                {
+                    let a = astres[i];
+                    a.x+=a.vx*100000/a.weight;
+                    a.y+=a.vy*100000/a.weight;
+                }
+            }
+            static drawall()
+            {
+                ctx.fillStyle = 'rgba(0, 100, 0, 0.25)';
+                ctx.fillRect(0, 0,  width, height);
+                for (let i = 0; i < astres.length; i++)
+                {
+                    astres[i].draw();
+                }
+                drawText(String(points) + " points", 10, 50);
+            }
+        };
+
+        function randint(a, b)
+        {
+            return Math.floor(Math.random() * (b-a)) + a;
+        }
+
+        let gun_a = 1;
+
+        let asteroid = undefined;
+        let generate = true;
+        let earth;
+        let waiting = false;
+        let waiting2 = false;
+        let lastStateOfMouse = false;
+
+        function selectDirectionloop()
+        {
+            Astre.drawall();
+
+            if (inputStates.left)
+                gun_a+=radians(0.1);
+            if (inputStates.right)
+                gun_a-=radians(0.1);
+
+            if(waiting2)
+            {
+                if(lst_mouseX-mouseX)
+                {
+                    waiting2=false;
+                    lastStateOfMouse=true;
+                    lst_mouseX = mouseX;
+                }
+            }
+            if(mouseDown && !lastStateOfMouse)
+            {
+                console.log("down");
+                lst_mouseX = mouseX;
+                console.log(lst_mouseX, mouseX, lst_mouseX-mouseX);
+                waiting2=true;
+            }
+
+            if(mouseDown && lastStateOfMouse)
+            {
+                console.log("pushed");
+                console.log(lst_mouseX, mouseX, lst_mouseX-mouseX);
+                gun_a += (lst_mouseX-mouseX)/1000;
+                lst_mouseX = mouseX;
+            }
+
+            if(!mouseDown && lastStateOfMouse)
+            {
+                console.log("up");
+                lastStateOfMouse=false;
+            }
+
+            if (inputStates.up && waiting === false || launched)
+            {
+                waiting=true;
+                waitKey();
+                nb_tentatives++;
+                console.log(nb_tentatives);
+                let ve = [0, 0];
+                ve[0] = 0;
+                ve[1] = 0;
+                ve = rotate(0.3, 0, gun_a);
+
+                asteroid.x = 100;
+                asteroid.y = 100;
+                asteroid.vx = ve[0];
+                asteroid.vy = ve[1];
+                
+                requestAnimationFrame(updateloop);
+            }
+
+            let ve = rotate(1000, 0, gun_a);
+            drawline(100, 100, ve[0], ve[1]);
+            
+            requestAnimationFrame(selectDirectionloop);
+        }
+
+        function waitKey()
+        {
+            if(!inputStates.up && launched)
+            {
+                waiting=false;
+                launched=false;
+                return;
+            }
+            requestAnimationFrame(waitKey);
+        }
+
+        function updateloop()
+        {
+            Astre.update();
+            Astre.drawall();
+
+            if((inputStates.up || mouseDown) && waiting===false)
+            {
+                return;
+            }
+
+            if (inputStates.down)
+            {
+                return;
+            }
+
+            if(Math.sqrt(Math.pow(asteroid.x - earth.x, 2) + Math.pow(asteroid.y - earth.y, 2)) < 50)
+            {
+                generate=true;
+                points+=nb_to_generate/nb_tentatives;
+                nb_tentatives=0;
+                nb_to_generate++;
+                generateO();
+                return;
+            }
+
+            requestAnimationFrame(updateloop);
+        }
+
+        function generateO()
+        {
+            if(generate)
+            {
+                astres = [];
+
+                asteroid = new Astre(100, 100, 10000, 255, 255, 255, true);
+                earth = new Astre(width-100, height-100, 10000, 100, 255, 100, false);
+
+                for (let i = 0; i < ((nb_to_generate<15) ? (nb_to_generate) : (15)); i++)
+                new Astre(randint(300, width-200), randint(300, height), randint(1000000, 4000000), 255, 10, 0, false);
+            }
+            
+            return;
+        }
+
+        generateO()
+        selectDirectionloop()
+    </script>
+  </body>
+</html>
